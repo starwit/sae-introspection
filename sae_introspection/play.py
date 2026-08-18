@@ -4,7 +4,7 @@ from datetime import timedelta
 import pybase64
 from visionapi.analytics_pb2 import DetectionCountMessage
 from visionapi.sae_pb2 import PositionMessage, SaeMessage
-from visionlib.pipeline.publisher import RedisPublisher
+from visionlib.pipeline import ValkeyPublisher
 from visionlib.saedump import DumpMeta, Event, message_splitter
 
 from .common import (InternalMessageType, default_arg_parser,
@@ -55,12 +55,12 @@ def main():
     arg_parser.add_argument('-i', '--fixed-interval', type='natural_timedelta', help='Ignore embedded timestamp and instead output messages at the given interval (natural timedelta)', metavar='INTERVAL')
     args = arg_parser.parse_args()
 
-    REDIS_HOST = args.redis_host
-    REDIS_PORT = args.redis_port
+    VALKEY_HOST = args.valkey_host
+    VALKEY_PORT = args.valkey_port
 
     stop_event = register_stop_handler()
 
-    publish = RedisPublisher(REDIS_HOST, REDIS_PORT)
+    publish = ValkeyPublisher(VALKEY_HOST, VALKEY_PORT)
 
     with publish, open(args.dumpfile, 'r') as input_file:
         while not stop_event.is_set():

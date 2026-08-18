@@ -20,20 +20,20 @@ class InternalMessageType(str, Enum):
     POSITION = 'POSITION'
     SAE_EVENT = 'SAE_EVENT'
 
-def choose_stream(redis_client) -> str:
-    available_streams = sorted(map(lambda b: b.decode('utf-8'), redis_client.scan(_type='STREAM', count=100)[1]))
-    menu = TerminalMenu(available_streams, title='Choose Redis stream to attach to:', show_search_hint=True)
+def choose_stream(valkey_client) -> str:
+    available_streams = sorted(map(lambda b: b.decode('utf-8'), valkey_client.scan(_type='STREAM', count=100)[1]))
+    menu = TerminalMenu(available_streams, title='Choose Valkey stream to attach to:', show_search_hint=True)
     selected_idx = menu.show()
     if selected_idx is None:
         print('No stream chosen. Exiting.', file=sys.stderr)
         exit(0)
     return available_streams[selected_idx]
 
-def choose_streams(redis_client) -> str:
-    available_streams = sorted(map(lambda b: b.decode('utf-8'), redis_client.scan(_type='STREAM', count=100)[1]))
+def choose_streams(valkey_client) -> str:
+    available_streams = sorted(map(lambda b: b.decode('utf-8'), valkey_client.scan(_type='STREAM', count=100)[1]))
     menu = TerminalMenu(
         available_streams, 
-        title='Choose Redis streams to attach to:', 
+        title='Choose Valkey streams to attach to:',
         show_search_hint=True,
         multi_select=True,
         multi_select_empty_ok=True,
@@ -68,8 +68,9 @@ def _parse_duration(value: str) -> timedelta:
 def default_arg_parser():
     arg_parser = argparse.ArgumentParser(add_help=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('--help', action='help', help='Show help message and exit')
-    arg_parser.add_argument('-h', '--redis-host', type=str, default='localhost', help='Redis/Valkey host to connect to', metavar='HOST')
-    arg_parser.add_argument('-p', '--redis-port', type=int, default=6379, help='Redis/Valkey port to connect to', metavar='PORT')
+    # --redis-* is kept as a deprecated alias for the flags' previous names
+    arg_parser.add_argument('-h', '--valkey-host', '--redis-host', type=str, default='localhost', help='Valkey/Redis host to connect to', metavar='HOST')
+    arg_parser.add_argument('-p', '--valkey-port', '--redis-port', type=int, default=6379, help='Valkey/Redis port to connect to', metavar='PORT')
     arg_parser.add_argument('--start-at-head', action='store_true',
                             help='Start reading at the stream head, i.e. the oldest element, instead of attaching to the end')
 

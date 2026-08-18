@@ -3,10 +3,9 @@ import time
 
 import cv2
 import numpy as np
-import redis
+import valkey
 from visionapi.sae_pb2 import Detection, SaeMessage
-from visionlib.pipeline.consumer import RedisConsumer
-from visionlib.pipeline.tools import get_raw_frame_data
+from visionlib.pipeline import ValkeyConsumer, get_raw_frame_data
 
 from .common import (InternalMessageType, choose_stream, default_arg_parser,
                      determine_message_type, register_stop_handler)
@@ -127,16 +126,16 @@ def main():
         args.stdout = False
 
     STREAM_KEY = args.stream
-    REDIS_HOST = args.redis_host
-    REDIS_PORT = args.redis_port
+    VALKEY_HOST = args.valkey_host
+    VALKEY_PORT = args.valkey_port
 
     if STREAM_KEY is None:
-        redis_client = redis.Redis(REDIS_HOST, REDIS_PORT)
-        STREAM_KEY = choose_stream(redis_client)
-    
+        valkey_client = valkey.Valkey(VALKEY_HOST, VALKEY_PORT)
+        STREAM_KEY = choose_stream(valkey_client)
+
     stop_event = register_stop_handler()
 
-    consume = RedisConsumer(REDIS_HOST, REDIS_PORT, [STREAM_KEY], block=200, start_at_head=args.start_at_head)
+    consume = ValkeyConsumer(VALKEY_HOST, VALKEY_PORT, [STREAM_KEY], block=200, start_at_head=args.start_at_head)
 
     with consume:
         for stream_key, proto_data in consume():

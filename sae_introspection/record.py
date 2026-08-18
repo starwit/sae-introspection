@@ -3,11 +3,10 @@ from typing import TextIO
 
 import cv2
 import pybase64
-import redis
+import valkey
 from turbojpeg import TurboJPEG
 from visionapi.sae_pb2 import SaeMessage
-from visionlib.pipeline.consumer import RedisConsumer
-from visionlib.pipeline.tools import get_raw_frame_data
+from visionlib.pipeline import ValkeyConsumer, get_raw_frame_data
 from visionlib.saedump import MESSAGE_SEPARATOR, DumpMeta, Event, EventMeta
 
 from .common import (InternalMessageType, choose_streams, default_arg_parser,
@@ -85,18 +84,18 @@ def main():
     args = arg_parser.parse_args()
 
     STREAM_KEYS = args.streams
-    REDIS_HOST = args.redis_host
-    REDIS_PORT = args.redis_port
+    VALKEY_HOST = args.valkey_host
+    VALKEY_PORT = args.valkey_port
 
     if STREAM_KEYS is None:
-        redis_client = redis.Redis(REDIS_HOST, REDIS_PORT)
-        STREAM_KEYS = choose_streams(redis_client)
+        valkey_client = valkey.Valkey(VALKEY_HOST, VALKEY_PORT)
+        STREAM_KEYS = choose_streams(valkey_client)
 
     print(f'Recording streams {STREAM_KEYS} for {args.time_limit} into {args.output_file}')
 
     stop_event = register_stop_handler()
 
-    consume = RedisConsumer(REDIS_HOST, REDIS_PORT, STREAM_KEYS, block=200, start_at_head=args.start_at_head)
+    consume = ValkeyConsumer(VALKEY_HOST, VALKEY_PORT, STREAM_KEYS, block=200, start_at_head=args.start_at_head)
 
     start_time = time.time()
 

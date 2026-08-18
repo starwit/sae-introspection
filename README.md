@@ -1,6 +1,6 @@
 # sae-introspection
 
-Tools to look into a running [Starwit Awareness Engine](https://github.com/starwit/starwit-awareness-engine) (SAE) instance: watch, record, play back and inspect the messages flowing through its Redis/Valkey streams.
+Tools to look into a running [Starwit Awareness Engine](https://github.com/starwit/starwit-awareness-engine) (SAE) instance: watch, record, play back and inspect the messages flowing through its Valkey streams.
 
 # Installation
 
@@ -41,8 +41,8 @@ These tools were originally made for `SaeMessages`, however, `sae-echo` supports
 
 ## Visual Introspection (`sae-watch`)
 `sae-watch` can be used to visually look into the data flows within the pipeline.
-On a technical level, it attaches to a Redis stream of your choice and then tries to guess from the name prefix which stage output it has to decode.
-It will then render (and annotate, if possible) every output object / proto it receives from Redis.
+On a technical level, it attaches to a Valkey stream of your choice and then tries to guess from the name prefix which stage output it has to decode.
+It will then render (and annotate, if possible) every output object / proto it receives from Valkey.
 You can exit the program by pressing `q` in the video window or hitting Ctrl-C on the CLI.
 
 ### Create video from output
@@ -56,11 +56,11 @@ You can increase the quality (and file size) by lowering the `crf` value (-6 app
 - `sae-watch -s objectdetector:video1` renders frames with detected objects (assuming that `objectdetector:*` contains outputs of the objectdetector stage, which is default)
 
 ### Caveats
-- Data transfer from Redis and rendering will increase your system load by another few percent
+- Data transfer from Valkey and rendering will increase your system load by another few percent
 
 
 ## Pipeline Recording (`sae-record`)
-`sae-record` provides a simple way to record messages from some or all Redis streams into a file, i.e. create a log of all pipeline activities / state.
+`sae-record` provides a simple way to record messages from some or all Valkey streams into a file, i.e. create a log of all pipeline activities / state.
 See `sae-record --help` for how to use it. \
 For creating longer recordings, the tool offers several options to control the file size, as JPEG frames are very big in comparison to efficient video codecs like H.264/H.265 and there are some inefficiencies regarding space in the saedump format. `-r` / `--remove-frame` removes frames from messages before writing them to the dump file. `-d` / `--downscale-frames` (with `-q` / `--downscale-jpeg-quality`) enables trading some quality loss for smaller file sizes.
 
@@ -69,7 +69,7 @@ For creating longer recordings, the tool offers several options to control the f
 
 
 ## Pipeline Playback (`sae-play`)
-`sae-play` plays back a pipeline log into a running pipeline (i.e. at least a running Redis instance). It'll read the log file it is given and play back all messages into the corresponding streams they were recorded from. The messages will be spaced exactly as they were recorded (i.e. a 5fps recording will be played back at the same speed). For many real-world test cases the option `-t` might be interesting, which enables rewriting the message timestamps to the present moment (while still preserving message cadence).
+`sae-play` plays back a pipeline log into a running pipeline (i.e. at least a running Valkey instance). It'll read the log file it is given and play back all messages into the corresponding streams they were recorded from. The messages will be spaced exactly as they were recorded (i.e. a 5fps recording will be played back at the same speed). For many real-world test cases the option `-t` might be interesting, which enables rewriting the message timestamps to the present moment (while still preserving message cadence).
 See `sae-play --help` for how to use it.
 
 
