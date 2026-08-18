@@ -96,3 +96,11 @@ sae-echo -f | jq -r .frame.frameDataJpeg
 `sae-echo -f` keeps the frame data in the JSON output, `jq` picks the base64-encoded JPEG out of each message, and the loop in the script then base64-decodes it, strips metadata with `jpegtran`, and names each file by its SHA-256 sum so identical frames collapse into one file.
 
 Usage: `./scripts/save_frames.sh OUTPUT_DIR` (needs `jq`, `jpegtran` from libjpeg-turbo-progs, and `coreutils`).
+
+The script is not installed by pipx — only the Python tools are. It doesn't need to be, though: its only dependency on this project is `sae-echo` being on your `PATH`. So grab it and run it next to a pipx install:
+
+```sh
+curl -O https://raw.githubusercontent.com/starwit/sae-introspection/main/scripts/save_frames.sh
+chmod +x save_frames.sh
+./save_frames.sh ./frames
+```

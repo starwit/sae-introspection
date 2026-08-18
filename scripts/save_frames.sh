@@ -10,6 +10,32 @@ if [ $# -ne 1 ]; then
   exit 1
 fi
 
+# Check up front, otherwise a missing tool only shows up as a per-frame warning
+# from the pipeline below (whose stderr is suppressed)
+check_requirements() {
+  local missing=0 cmd hint
+
+  for cmd in sae-echo jq jpegtran base64 sha256sum cut mktemp touch; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      continue
+    fi
+
+    case "$cmd" in
+      sae-echo) hint="pipx install git+https://github.com/starwit/sae-introspection.git" ;;
+      jq) hint="apt install jq" ;;
+      jpegtran) hint="apt install libjpeg-turbo-progs" ;;
+      *) hint="apt install coreutils" ;;
+    esac
+
+    echo "error: required command '$cmd' not found (try: $hint)" >&2
+    missing=1
+  done
+
+  return $missing
+}
+
+check_requirements || exit 1
+
 SOURCE_CMD="set -o pipefail; sae-echo -f | jq -r .frame.frameDataJpeg"
 OUTDIR="$1"
 mkdir -p "$OUTDIR"
