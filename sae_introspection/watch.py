@@ -33,7 +33,9 @@ def get_image(sae_msg: SaeMessage):
     else:
         frame = get_raw_frame_data(sae_msg.frame)
         if frame is not None:
-            return frame
+            # For uncompressed frames get_raw_frame_data() returns a read-only view onto the
+            # proto's bytes. annotate() draws into the image, so it has to be writable.
+            return frame if frame.flags.writeable else frame.copy()
         else:
             # If no frame is available, return a grey image as a last resort
             return np.ones((sae_msg.frame.shape.height, sae_msg.frame.shape.width, 3), dtype=np.uint8) * 127

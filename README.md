@@ -36,6 +36,29 @@ This puts the following commands on your `PATH`:
 - Install dependencies: `poetry install`
 - Run a tool: `poetry run sae-watch` (or `poetry run python -m sae_introspection.watch`)
 
+### Running tests
+
+The tests are end-to-end smoke tests: they run the installed console scripts as subprocesses, just
+like a user would, and check what comes out.
+
+```sh
+poetry run pytest                 # fast tests, no Docker needed
+poetry run pytest -m integration  # runs the tools against a real Valkey
+poetry run pytest -m ''           # everything
+```
+
+The integration tests spin up a Valkey instance via
+[testcontainers](https://testcontainers-python.readthedocs.io/), so a working Docker installation is
+required. They are excluded from the default run so that `pytest` stays usable without Docker.
+
+If you see weird Docker errors, it is probably because you are running rootless Docker
+(see [this issue](https://github.com/testcontainers/testcontainers-python/issues/537)).
+Make sure `DOCKER_HOST` points at the correct socket:
+
+```sh
+export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock
+```
+
 # Tools
 These tools were originally made for `SaeMessages`, however, `sae-echo` supports more vision-api message types (see below).
 

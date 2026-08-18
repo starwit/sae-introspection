@@ -36,6 +36,20 @@ sae-watch = "sae_introspection.watch:main"
 [tool.poetry]
 packages = [{include = "sae_introspection"}]
 
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.2.1"
+testcontainers = "4.14.1"
+
+[tool.pytest.ini_options]
+# Makes tests/helpers.py importable from every test module regardless of its directory
+pythonpath = ["tests"]
+markers = [
+    "integration"
+]
+addopts = [
+    "-m not integration",
+]
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
