@@ -35,21 +35,20 @@ def make_sae_msg(source_id='test_source', timestamp_utc_ms=1700000000000, num_de
     msg.frame.frame_data = bytes(FRAME_BYTES)
 
     for idx in range(num_detections):
-        msg.detections.append(make_detection(idx))
+        msg.detections.append(_make_detection(idx))
 
     return msg
 
 
-def make_detection(idx=0, class_id=1, object_id=None) -> Detection:
-    '''Builds a Detection whose bounding box moves with idx, so trajectories are visible.'''
+def _make_detection(idx=0) -> Detection:
     det = Detection()
     det.bounding_box.min_x = 0.1 + idx * 0.01
     det.bounding_box.min_y = 0.1 + idx * 0.01
     det.bounding_box.max_x = 0.2 + idx * 0.01
     det.bounding_box.max_y = 0.2 + idx * 0.01
     det.confidence = 0.9
-    det.class_id = class_id
-    det.object_id = object_id if object_id is not None else uuid.uuid4().bytes
+    det.class_id = 1
+    det.object_id = uuid.uuid4().bytes
     return det
 
 
