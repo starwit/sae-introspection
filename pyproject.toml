@@ -1,0 +1,41 @@
+[project]
+name = "sae-introspection"
+version = "0.1.0"
+description = "Tools to look into a running Starwit Awareness Engine instance"
+authors = [
+    {name = "flonix8",email = "flstanek@googlemail.com"}
+]
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "numpy (>=1.24.0,<2.0.0)",
+    "opencv-python (>=3,<5.0.0.0)",
+    "palettable (>=3.3.3,<4.0.0)",
+    "protobuf (>=6.31.1,<7.0.0)",
+    "pybase64 (>=1.4.1,<2.0.0)",
+    "pyturbojpeg (>=1.8.2,<2.0.0)",
+    "redis (>=5.0.0,<6.0.0)",
+    "simple-term-menu (>=1.6.6,<2.0.0)",
+    "tempora (>=5.8.1,<6.0.0)",
+    "tqdm (>=4.67.1,<5.0.0)",
+    "visionapi @ git+https://github.com/starwit/vision-api.git@3.7.0#subdirectory=python/visionapi",
+    "visionlib @ git+https://github.com/starwit/vision-lib.git@0.14.0#subdirectory=python",
+]
+
+[project.urls]
+repository = "https://github.com/starwit/sae-introspection"
+
+[project.scripts]
+sae-echo = "sae_introspection.echo:main"
+sae-play = "sae_introspection.play:main"
+sae-plot = "sae_introspection.plot:main"
+sae-record = "sae_introspection.record:main"
+sae-watch = "sae_introspection.watch:main"
+
+[tool.poetry]
+packages = [{include = "sae_introspection"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
