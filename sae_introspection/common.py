@@ -142,4 +142,4 @@ def determine_message_type(message_bytes: bytes) -> InternalMessageType:
         except Exception as e:
             raise ValueError('Unknown message type. Exception while parsing message', e)
     else:
-        raise ValueError('Unsupported message type (type={msg.type})')
+        raise ValueError(f'Unsupported message type (type={msg.type})')
