@@ -2,6 +2,7 @@ import functools
 import os
 import sys
 import time
+from importlib.resources import files
 
 import valkey
 from PIL import Image, ImageDraw, ImageFont
@@ -78,6 +79,8 @@ def showImage(stream_id, image: Image.Image):
     if not pygame.display.get_init():
         pygame.display.init()
         pygame.display.set_caption(stream_id)
+        # Must be set before the window is created by set_mode()
+        pygame.display.set_icon(pygame.image.load(files('sae_introspection') / 'assets' / 'icon.png'))
 
     window = pygame.display.get_surface()
 
