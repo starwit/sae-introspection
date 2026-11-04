@@ -1,9 +1,10 @@
 import time
 from typing import TextIO
 
-import cv2
+import numpy as np
 import pybase64
 import valkey
+from PIL import Image
 from turbojpeg import TurboJPEG
 from visionapi.sae_pb2 import SaeMessage
 from visionlib.pipeline import ValkeyConsumer, get_raw_frame_data
@@ -66,9 +67,11 @@ def resize_frame(msg: SaeMessage, scale_width=0, quality=85):
     if frame is None:
         return
 
-    original_width = frame.shape[1]
+    original_height, original_width = frame.shape[:2]
     scale_factor = scale_width / original_width
-    frame = cv2.resize(frame, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
+    new_size = (scale_width, round(original_height * scale_factor))
+    # Pillow ignores channel order, so the BGR frame stays BGR (as expected by TurboJPEG)
+    frame = np.asarray(Image.fromarray(frame).resize(new_size, Image.Resampling.BOX))
 
     msg.frame.frame_data_jpeg = get_jpeg().encode(frame, quality)
 

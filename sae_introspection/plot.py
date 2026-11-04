@@ -2,11 +2,10 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Dict, Generator, List, Tuple
 
-import cv2
-import numpy as np
 import pybase64
 import tqdm
 from palettable.colorbrewer.qualitative import Set1_9
+from PIL import Image, ImageDraw
 from visionapi.sae_pb2 import SaeMessage
 from visionlib.saedump import DumpMeta, Event, message_splitter
 
@@ -51,12 +50,11 @@ def iter_sae_messages(dump_file: Path, stream_id: str) -> Generator[SaeMessage, 
         
         yield sae_msg
         
-def draw_line(img, pt1: Tuple[float], pt2: Tuple[float], class_id: int):
-    cv2.line(img, (int(pt1[0] * img.shape[1]), int(pt1[1] * img.shape[0])), (int(pt2[0] * img.shape[1]), int(pt2[1] * img.shape[0])), color=get_color(class_id), thickness=1, lineType=cv2.LINE_AA)
+def draw_line(img: Image.Image, pt1: Tuple[float], pt2: Tuple[float], class_id: int):
+    ImageDraw.Draw(img).line([(int(pt1[0] * img.width), int(pt1[1] * img.height)), (int(pt2[0] * img.width), int(pt2[1] * img.height))], fill=get_color(class_id), width=1)
 
 def get_color(class_id: int) -> Tuple[int]:
-    c = CLS_CMAP[class_id % len(CLS_CMAP)]
-    return (c[2], c[1], c[0])
+    return tuple(CLS_CMAP[class_id % len(CLS_CMAP)])
 
 
 def main():
@@ -74,9 +72,9 @@ def main():
         stream_id = choose_stream_from_list(streams)
 
     if args.image_file is not None:
-        image = cv2.imread(args.image_file, cv2.IMREAD_COLOR)
+        image = Image.open(args.image_file).convert('RGB')
     else:
-        image = np.ones((1080, 1920, 3), dtype=np.uint8) * 127
+        image = Image.new('RGB', (1920, 1080), (127, 127, 127))
 
     annotated_image = image.copy()
 
@@ -102,9 +100,9 @@ def main():
             previous_points[obj_id] = new_point
 
     
-    output_image = cv2.addWeighted(annotated_image, ALPHA, image, 1 - ALPHA, 0)
+    output_image = Image.blend(image, annotated_image, ALPHA)
 
-    cv2.imwrite(output_file, output_image, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    output_image.save(output_file, quality=90)
     print(f'Output written to {output_file}')
         
 

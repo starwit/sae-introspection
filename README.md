@@ -27,12 +27,12 @@ This puts the following commands on your `PATH`:
 
 ### Prerequisites
 
-- Python >= 3.10
+- Python >= 3.11
 - `libturbojpeg` on your OS (e.g. `apt install libturbojpeg`)
 
 ## For development
 
-- Python >= 3.10, Poetry >= 2.0.0
+- Python >= 3.11, Poetry >= 2.0.0
 - Install dependencies: `poetry install`
 - Run a tool: `poetry run sae-watch` (or `poetry run python -m sae_introspection.watch`)
 
@@ -66,7 +66,7 @@ These tools were originally made for `SaeMessages`, however, `sae-echo` supports
 `sae-watch` can be used to visually look into the data flows within the pipeline.
 On a technical level, it attaches to a Valkey stream of your choice and then tries to guess from the name prefix which stage output it has to decode.
 It will then render (and annotate, if possible) every output object / proto it receives from Valkey.
-You can exit the program by pressing `q` in the video window or hitting Ctrl-C on the CLI.
+You can exit the program by pressing `q` in the video window, closing the window or hitting Ctrl-C on the CLI.
 
 ### Create video from output
 Find out the frame size and framerate, then run (replacing `-r 10` (fps) and `-s 3840x2160` (size in px) with the appropriate values):\
