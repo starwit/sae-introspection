@@ -1,4 +1,5 @@
 import functools
+import io
 import os
 import sys
 import time
@@ -6,6 +7,7 @@ from importlib.resources import files
 
 import valkey
 from PIL import Image, ImageDraw, ImageFont
+from visionapi.anomaly_pb2 import AnomalyMessage, Trajectory
 from visionapi.sae_pb2 import Detection, SaeMessage
 from visionlib.pipeline import ValkeyConsumer, get_raw_frame_data
 
@@ -19,9 +21,16 @@ import pygame
 # Images are kept in BGR channel order (like the frames coming from the SAE), so colors are BGR, too.
 # Pillow does not care about channel order, it just calls the image mode "RGB".
 ANNOTATION_COLOR = (0, 0, 255)
+ANOMALY_TRIGGER_COLOR = (0, 255, 255)
 DEFAULT_WINDOW_SIZE = (1280, 720)
+GREY = (127, 127, 127)
+# Max. time between handling window events while waiting (keeps the window responsive)
+WINDOW_EVENT_INTERVAL_S = 0.05
 
 previous_frame_timestamp = 0
+# Size of the first frame written to stdout. Raw video needs all frames to be the same size.
+stdout_frame_size = None
+stdout_resize_warned = False
 args = None
 stop_event = None
 
@@ -29,19 +38,30 @@ def swap_red_blue(image: Image.Image) -> Image.Image:
     c1, c2, c3 = image.split()
     return Image.merge('RGB', (c3, c2, c1))
 
+def read_image_file() -> Image.Image:
+    try:
+        return swap_red_blue(Image.open(args.image_file).convert('RGB'))
+    except OSError as e:
+        raise ValueError(f'Could not read image from file {args.image_file}') from e
+
 def get_image(sae_msg: SaeMessage) -> Image.Image:
     if args.image_file is not None:
-        try:
-            return swap_red_blue(Image.open(args.image_file).convert('RGB'))
-        except OSError as e:
-            raise ValueError(f'Could not read image from file {args.image_file}') from e
+        return read_image_file()
     else:
         frame = get_raw_frame_data(sae_msg.frame)
         if frame is not None:
             return Image.fromarray(frame)
         else:
             # If no frame is available, return a grey image as a last resort
-            return Image.new('RGB', (sae_msg.frame.shape.width, sae_msg.frame.shape.height), (127, 127, 127))
+            return Image.new('RGB', (sae_msg.frame.shape.width, sae_msg.frame.shape.height), GREY)
+
+def get_anomaly_image(frame_data_jpeg: bytes, fallback_size) -> Image.Image:
+    if args.image_file is not None:
+        return read_image_file()
+    if len(frame_data_jpeg) > 0:
+        return swap_red_blue(Image.open(io.BytesIO(frame_data_jpeg)).convert('RGB'))
+    # If no frame is available, return a grey image as a last resort
+    return Image.new('RGB', fallback_size, GREY)
 
 @functools.lru_cache
 def get_font(size: int) -> ImageFont.FreeTypeFont:
@@ -62,11 +82,43 @@ def annotate(image: Image.Image, detection: Detection):
         object_id = detection.object_id.hex()[:4]
         label = f'ID {object_id} - {class_id} - {round(conf,2)}'
 
-    line_width = max(round((image.width + image.height) / 2 * 0.002), 2)
+    line_width = get_line_width(image)
 
     draw = ImageDraw.Draw(image)
     draw.rectangle((bbox_x1, bbox_y1, bbox_x2, bbox_y2), outline=ANNOTATION_COLOR, width=line_width)
     draw.text((bbox_x1, bbox_y1 - 10), label, fill=ANNOTATION_COLOR, font=get_font(line_width * 8), anchor='ls')
+
+def get_line_width(image: Image.Image) -> int:
+    return max(round((image.width + image.height) / 2 * 0.002), 2)
+
+def annotate_trajectory(image: Image.Image, trajectory: Trajectory, up_to_ts: int = None):
+    '''Draws the trajectory up to (and including) the given timestamp, or entirely if None.
+    Points that triggered the anomaly are highlighted.'''
+    points = sorted(
+        (p for p in trajectory.trajectory_points if up_to_ts is None or p.timestamp_utc_ms <= up_to_ts),
+        key=lambda p: p.timestamp_utc_ms,
+    )
+    if len(points) == 0:
+        return
+
+    # Detection centers are normalized (like bounding boxes in SaeMessage)
+    coords = [(p.detection_center.x * image.width, p.detection_center.y * image.height) for p in points]
+    line_width = get_line_width(image)
+
+    draw = ImageDraw.Draw(image)
+    if len(coords) > 1:
+        draw.line(coords, fill=ANNOTATION_COLOR, width=line_width, joint='curve')
+
+    radius = line_width * 2
+    for point, (x, y) in zip(points, coords):
+        if point.anomaly_trigger:
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=ANOMALY_TRIGGER_COLOR)
+
+    label = f'{trajectory.class_id}'
+    if len(trajectory.object_id) > 0:
+        label = f'ID {trajectory.object_id.hex()[:4]} - {trajectory.class_id}'
+    x, y = coords[-1]
+    draw.text((x, y - 10), label, fill=ANNOTATION_COLOR, font=get_font(line_width * 8), anchor='ls')
 
 def showImage(stream_id, image: Image.Image):
     # When using fixed scale, resize the image before displaying
@@ -109,6 +161,34 @@ def handle_window_events():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
             stop_event.set()
 
+def wait_responsive(seconds: float):
+    '''Waits for the given time while keeping the window responsive. Returns early if a stop is requested.'''
+    deadline = time.time() + seconds
+    while not stop_event.is_set():
+        handle_window_events()
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return
+        stop_event.wait(min(remaining, WINDOW_EVENT_INTERVAL_S))
+
+def emit_frame(image: Image.Image, stream_key: str, show_image: bool):
+    global stdout_frame_size, stdout_resize_warned
+
+    if args.stdout:
+        out_image = image
+        if stdout_frame_size is None:
+            stdout_frame_size = image.size
+        elif image.size != stdout_frame_size:
+            if not stdout_resize_warned:
+                print(f'Frame size {image.size} differs from first frame size {stdout_frame_size}. '
+                      'Resizing differing frames for stdout output.', file=sys.stderr)
+                stdout_resize_warned = True
+            out_image = image.resize(stdout_frame_size, Image.Resampling.BILINEAR)
+        sys.stdout.buffer.write(out_image.tobytes())
+
+    if show_image:
+        showImage(stream_key, image)
+
 def handle_sae_message(sae_message_bytes, stream_key, show_image=True):
     global previous_frame_timestamp, args
 
@@ -127,12 +207,51 @@ def handle_sae_message(sae_message_bytes, stream_key, show_image=True):
 
     for detection in sae_msg.detections:
         annotate(image, detection)
-    
-    if args.stdout:
-        sys.stdout.buffer.write(image.tobytes())
 
-    if show_image:
-        showImage(stream_key, image)
+    emit_frame(image, stream_key, show_image)
+
+def handle_anomaly_message(anomaly_message_bytes, stream_key, show_image=True):
+    '''An AnomalyMessage carries a clip. Its frames are rendered with the trajectories progressing over time and,
+    when displayed, paced as recorded. The last frame stays on screen until the next message arrives.'''
+    msg = AnomalyMessage()
+    msg.ParseFromString(anomaly_message_bytes)
+
+    frames = sorted(msg.jpeg_frames, key=lambda f: f.timestamp_utc_ms)
+    points = [p for t in msg.trajectories for p in t.trajectory_points]
+    timestamps = [f.timestamp_utc_ms for f in frames] + [p.timestamp_utc_ms for p in points]
+
+    log_line = (f'Anomaly from {msg.source_id or "<unknown source>"}: {len(frames)} frames, {len(msg.trajectories)} trajectories, '
+                f'{sum(p.anomaly_trigger for p in points)} trigger points')
+    if len(timestamps) > 0:
+        log_line += f', Clip duration: {max(timestamps) - min(timestamps)} ms, Age: {round(time.time() * 1000 - max(timestamps))} ms'
+    if msg.HasField('model_info'):
+        log_line += f', Model: {msg.model_info.name} {msg.model_info.version}'
+    print(log_line, file=sys.stderr)
+
+    if len(frames) == 0:
+        # Nothing to play back, show the complete trajectories at once
+        image = get_anomaly_image(b'', DEFAULT_WINDOW_SIZE)
+        for trajectory in msg.trajectories:
+            annotate_trajectory(image, trajectory)
+        emit_frame(image, stream_key, show_image)
+        return
+
+    clip_start = time.time()
+    fallback_size = DEFAULT_WINDOW_SIZE
+    for frame in frames:
+        if show_image:
+            # Pacing only matters for display, the content written to stdout is the same either way
+            wait_responsive(clip_start + (frame.timestamp_utc_ms - frames[0].timestamp_utc_ms) / 1000 - time.time())
+        if stop_event.is_set():
+            return
+
+        image = get_anomaly_image(frame.frame_data_jpeg, fallback_size)
+        fallback_size = image.size
+
+        for trajectory in msg.trajectories:
+            annotate_trajectory(image, trajectory, frame.timestamp_utc_ms)
+
+        emit_frame(image, stream_key, show_image)
 
 
 def main():
@@ -174,11 +293,14 @@ def main():
             if stream_key is None:
                 continue
 
-            if (msg_type := determine_message_type(proto_data)) != InternalMessageType.SAE:
-                print(f'Detected message type on stream {stream_key} is {msg_type.name}. Only type SAE is supported.')
-                exit(1)
-
-            handle_sae_message(proto_data, stream_key, show_image=not args.no_gui)
+            match determine_message_type(proto_data):
+                case InternalMessageType.SAE:
+                    handle_sae_message(proto_data, stream_key, show_image=not args.no_gui)
+                case InternalMessageType.ANOMALY:
+                    handle_anomaly_message(proto_data, stream_key, show_image=not args.no_gui)
+                case msg_type:
+                    print(f'Detected message type on stream {stream_key} is {msg_type.name}. Only types SAE and ANOMALY are supported.', file=sys.stderr)
+                    exit(1)
 
     pygame.quit()
 

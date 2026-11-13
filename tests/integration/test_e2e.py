@@ -5,8 +5,9 @@ import time
 
 import pybase64
 import pytest
-from helpers import (FRAME_BYTES, cli, make_sae_msg, run_cli, terminate,
-                     wait_until, write_saedump)
+from helpers import (FRAME_BYTES, cli, make_anomaly_msg, make_sae_msg,
+                     run_cli, terminate, wait_until, write_saedump)
+from visionapi.anomaly_pb2 import AnomalyMessage
 from visionapi.sae_pb2 import SaeMessage
 from visionlib.pipeline import ValkeyPublisher
 from visionlib.saedump import DumpMeta, Event, message_splitter
@@ -24,8 +25,8 @@ def publish(valkey_container, stream_key, messages):
             publisher(stream_key, msg.SerializeToString())
 
 
-def read_stream(valkey_client, stream_key):
-    '''Reads a stream back as deserialized SaeMessages.'''
+def read_stream(valkey_client, stream_key, msg_cls=SaeMessage):
+    '''Reads a stream back as deserialized messages (SaeMessages by default).'''
     result = valkey_client.xread({stream_key: '0'}, count=100)
     if not result:
         return []
@@ -34,14 +35,14 @@ def read_stream(valkey_client, stream_key):
     for _, entries in result:
         for _, fields in entries:
             proto_bytes = pybase64.standard_b64decode(fields[b'proto_data_b64'])
-            msg = SaeMessage()
+            msg = msg_cls()
             msg.ParseFromString(proto_bytes)
             messages.append(msg)
     return messages
 
 
-def read_saedump(path):
-    '''Returns (DumpMeta, [(source_stream, SaeMessage)]) from a dump file.'''
+def read_saedump(path, msg_cls=SaeMessage):
+    '''Returns (DumpMeta, [(source_stream, message)]) from a dump file (SaeMessages by default).'''
     with open(path, 'r') as file:
         message_iter = message_splitter(file)
         meta = DumpMeta.model_validate_json(next(message_iter))
@@ -49,7 +50,7 @@ def read_saedump(path):
         events = []
         for raw_event in message_iter:
             event = Event.model_validate_json(raw_event)
-            msg = SaeMessage()
+            msg = msg_cls()
             msg.ParseFromString(pybase64.standard_b64decode(event.data_b64))
             events.append((event.meta.source_stream, msg))
 
@@ -239,6 +240,93 @@ def test_record_then_play_round_trip(valkey_container, valkey_client, valkey_arg
     replayed = read_stream(valkey_client, source_stream)
 
     assert [msg.SerializeToString() for msg in replayed] == [msg.SerializeToString() for msg in original]
+
+
+ANOMALY_STREAM = 'anomalydetector:test'
+
+
+def record(valkey_args, stream, output_file, *extra_args):
+    result = subprocess.run(
+        [cli('sae-record'), *valkey_args, '-s', stream, '--start-at-head', '-t', '5s', *extra_args, '-o', str(output_file)],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, f'sae-record failed:\n{result.stderr}'
+    return result
+
+
+def test_record_anomaly_messages(valkey_container, valkey_args, tmp_path):
+    original = [make_anomaly_msg(start_ts_ms=1700000000000 + idx * 1000) for idx in range(2)]
+    publish(valkey_container, ANOMALY_STREAM, original)
+
+    output_file = tmp_path / 'anomaly.saedump'
+    record(valkey_args, ANOMALY_STREAM, output_file)
+
+    _, events = read_saedump(output_file, AnomalyMessage)
+
+    assert [msg.SerializeToString() for _, msg in events] == [msg.SerializeToString() for msg in original]
+
+
+def test_record_anomaly_remove_frames(valkey_container, valkey_args, tmp_path):
+    original = make_anomaly_msg()
+    publish(valkey_container, ANOMALY_STREAM, [original])
+
+    output_file = tmp_path / 'anomaly-no-frames.saedump'
+    record(valkey_args, ANOMALY_STREAM, output_file, '-r')
+
+    _, events = read_saedump(output_file, AnomalyMessage)
+    recorded = events[0][1]
+
+    assert len(recorded.jpeg_frames) == len(original.jpeg_frames)
+    assert [f.timestamp_utc_ms for f in recorded.jpeg_frames] == [f.timestamp_utc_ms for f in original.jpeg_frames]
+    assert all(f.frame_data_jpeg != o.frame_data_jpeg for f, o in zip(recorded.jpeg_frames, original.jpeg_frames))
+    assert recorded.trajectories == original.trajectories
+
+
+def test_play_adjusts_anomaly_timestamps(valkey_container, valkey_client, valkey_args, tmp_path):
+    original = make_anomaly_msg(start_ts_ms=1700000000000, num_frames=3, frame_interval_ms=100)
+    dump_file = write_saedump(tmp_path / 'anomaly.saedump', ANOMALY_STREAM, [original])
+
+    before_ms = time.time() * 1000
+    result = subprocess.run([cli('sae-play'), *valkey_args, '-t', str(dump_file)], capture_output=True, text=True, timeout=120)
+    after_ms = time.time() * 1000
+    assert result.returncode == 0, f'sae-play failed:\n{result.stderr}'
+
+    played_back = read_stream(valkey_client, ANOMALY_STREAM, AnomalyMessage)[0]
+    frame_ts = [f.timestamp_utc_ms for f in played_back.jpeg_frames]
+
+    assert before_ms - 1 <= frame_ts[-1] <= after_ms + 1
+    assert [ts - frame_ts[0] for ts in frame_ts] == [0, 100, 200]
+
+
+def test_echo_anomaly_message(valkey_container, valkey_args):
+    publish(valkey_container, ANOMALY_STREAM, [make_anomaly_msg(num_frames=3)])
+
+    proc = run_cli('sae-echo', *valkey_args, '-s', ANOMALY_STREAM, '--start-at-head', text=True)
+    try:
+        decoded = read_json_objects(proc, 1)[0]
+    finally:
+        _, stderr = terminate(proc)
+
+    assert 'ANOMALY' in stderr
+    assert len(decoded['trajectories']) == 2
+    # Frame entries stay, their data is stripped without -f
+    assert len(decoded['jpegFrames']) == 3
+    assert all(not f.get('frameDataJpeg') for f in decoded['jpegFrames'])
+
+
+def test_watch_renders_anomaly_clip_to_stdout(valkey_container, valkey_args):
+    publish(valkey_container, ANOMALY_STREAM, [make_anomaly_msg(num_frames=3)])
+
+    proc = run_cli('sae-watch', *valkey_args, '-s', ANOMALY_STREAM, '--start-at-head', '-n', '-o')
+    try:
+        assert wait_until(lambda: proc.poll() is not None or _readable(proc), timeout=30)
+        time.sleep(1.0)
+    finally:
+        stdout, stderr = terminate(proc)
+
+    # One raw bgr24 frame per clip frame
+    assert len(stdout) == 3 * FRAME_BYTES, f'stderr:\n{stderr.decode(errors="replace")}'
+    assert b'Anomaly from test_source' in stderr
 
 
 def _readable(proc):

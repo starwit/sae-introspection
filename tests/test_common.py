@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 from visionapi.analytics_pb2 import DetectionCountMessage
+from visionapi.anomaly_pb2 import AnomalyMessage
 from visionapi.common_pb2 import MessageType
 from visionapi.sae_pb2 import EventMessage, PositionMessage, SaeMessage
 
@@ -48,6 +49,13 @@ def make_event(with_type=True) -> bytes:
         msg.type = MessageType.SAE_EVENT
     msg.instance_id = 'test_instance'
     msg.timestamp_utc_ms = 1700000000000
+    return msg.SerializeToString()
+
+
+def make_anomaly() -> bytes:
+    msg = AnomalyMessage()
+    msg.type = MessageType.ANOMALY
+    msg.source_id = 'test_source'
     return msg.SerializeToString()
 
 
@@ -131,17 +139,18 @@ def test_natural_timedelta_rejects_garbage():
     (make_detection_count, InternalMessageType.DETECTION_COUNT),
     (make_position, InternalMessageType.POSITION),
     (make_event, InternalMessageType.SAE_EVENT),
+    (make_anomaly, InternalMessageType.ANOMALY),
 ])
 def test_type_field_is_authoritative(factory, expected):
     assert determine_message_type(factory()) == expected
 
 
 def test_unsupported_type_is_rejected():
-    '''ANOMALY and INCIDENT exist in the enum but none of the tools handle them.'''
+    '''INCIDENT exists in the enum but none of the tools handle it.'''
     msg = SaeMessage()
-    msg.type = MessageType.ANOMALY
+    msg.type = MessageType.INCIDENT
 
-    with pytest.raises(ValueError, match=f'Unsupported message type \\(type={MessageType.ANOMALY}\\)'):
+    with pytest.raises(ValueError, match=f'Unsupported message type \\(type={MessageType.INCIDENT}\\)'):
         determine_message_type(msg.SerializeToString())
 
 

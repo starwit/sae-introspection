@@ -1,3 +1,4 @@
+import io
 import os
 import shutil
 import subprocess
@@ -7,6 +8,8 @@ from pathlib import Path
 from typing import Callable, List
 
 import pybase64
+from PIL import Image
+from visionapi.anomaly_pb2 import AnomalyMessage
 from visionapi.common_pb2 import MessageType
 from visionapi.sae_pb2 import Detection, SaeMessage
 from visionlib.saedump import MESSAGE_SEPARATOR, DumpMeta, Event, EventMeta
@@ -50,6 +53,47 @@ def _make_detection(idx=0) -> Detection:
     det.class_id = 1
     det.object_id = uuid.uuid4().bytes
     return det
+
+
+def make_jpeg(width=FRAME_WIDTH, height=FRAME_HEIGHT, color=(200, 50, 50)) -> bytes:
+    buffer = io.BytesIO()
+    Image.new('RGB', (width, height), color).save(buffer, format='JPEG')
+    return buffer.getvalue()
+
+
+def make_anomaly_msg(source_id='test_source', start_ts_ms=1700000000000, num_frames=3, num_trajectories=2,
+                     frame_interval_ms=100) -> AnomalyMessage:
+    '''Builds an AnomalyMessage: a clip of real JPEG frames plus trajectories with one point per frame.
+
+    The trajectory points use normalized detection centers and the last point of the first
+    trajectory is marked as anomaly trigger.
+    '''
+    msg = AnomalyMessage()
+    msg.type = MessageType.ANOMALY
+    msg.source_id = source_id
+    msg.model_info.name = 'test_model'
+    msg.model_info.version = '1.0'
+
+    for idx in range(num_frames):
+        frame = msg.jpeg_frames.add()
+        frame.timestamp_utc_ms = start_ts_ms + idx * frame_interval_ms
+        frame.frame_data_jpeg = make_jpeg()
+
+    for traj_idx in range(num_trajectories):
+        traj = msg.trajectories.add()
+        traj.class_id = 2
+        traj.object_id = uuid.uuid4().bytes
+        for idx in range(num_frames):
+            point = traj.trajectory_points.add()
+            point.timestamp_utc_ms = start_ts_ms + idx * frame_interval_ms
+            point.detection_center.x = 0.1 + idx * 0.1
+            point.detection_center.y = 0.2 + traj_idx * 0.3
+            point.geo_coordinate.latitude = 52.5
+            point.geo_coordinate.longitude = 13.4
+        if traj_idx == 0:
+            traj.trajectory_points[-1].anomaly_trigger = True
+
+    return msg
 
 
 def write_saedump(path: Path, stream_key: str, messages: List[SaeMessage], interval_s=0.1) -> Path:

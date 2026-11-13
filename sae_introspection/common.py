@@ -19,6 +19,7 @@ class InternalMessageType(str, Enum):
     DETECTION_COUNT = 'DETECTION_COUNT'
     POSITION = 'POSITION'
     SAE_EVENT = 'SAE_EVENT'
+    ANOMALY = 'ANOMALY'
 
 def choose_stream(valkey_client) -> str:
     available_streams = sorted(map(lambda b: b.decode('utf-8'), valkey_client.scan(_type='STREAM', count=100)[1]))
@@ -130,6 +131,9 @@ def determine_message_type(message_bytes: bytes) -> InternalMessageType:
         return InternalMessageType.POSITION
     elif msg.type == MessageType.SAE_EVENT:
         return InternalMessageType.SAE_EVENT
+    elif msg.type == MessageType.ANOMALY:
+        # Anomaly messages always carry the type field, so there is no legacy heuristic for them
+        return InternalMessageType.ANOMALY
     elif msg.type == MessageType.UNSPECIFIED:
         # Try legacy heuristics
         try:

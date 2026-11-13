@@ -60,13 +60,17 @@ export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock
 ```
 
 # Tools
-These tools were originally made for `SaeMessages`, however, `sae-echo` supports more vision-api message types (see below).
+These tools were originally made for `SaeMessages`. Most of them support more vision-api message types by now (see below), including `AnomalyMessage`. An `AnomalyMessage` is a short clip: a series of JPEG frames plus the trajectories of the objects involved, with the points that triggered the anomaly marked.
 
 ## Visual Introspection (`sae-watch`)
 `sae-watch` can be used to visually look into the data flows within the pipeline.
 On a technical level, it attaches to a Valkey stream of your choice and then tries to guess from the name prefix which stage output it has to decode.
 It will then render (and annotate, if possible) every output object / proto it receives from Valkey.
-You can exit the program by pressing `q` in the video window, closing the window or hitting Ctrl-C on the CLI.
+You can exit the program by pressing `q` in the video window, closing the window or hitting Ctrl-C on the CLI.\
+Supported message types are `SaeMessage` and `AnomalyMessage`:
+- For an `AnomalyMessage`, the clip is played at its recorded speed, with each trajectory drawn up to the current frame and the anomaly trigger points highlighted. The last frame stays on screen until the next message arrives.
+- With `-n`, clips are not paced.
+- With `-o`, all frames are written at the size of the first frame, because raw video needs a constant frame size.
 
 ### Create video from output
 Find out the frame size and framerate, then run (replacing `-r 10` (fps) and `-s 3840x2160` (size in px) with the appropriate values):\
@@ -85,19 +89,25 @@ You can increase the quality (and file size) by lowering the `crf` value (-6 app
 ## Pipeline Recording (`sae-record`)
 `sae-record` provides a simple way to record messages from some or all Valkey streams into a file, i.e. create a log of all pipeline activities / state.
 See `sae-record --help` for how to use it. \
-For creating longer recordings, the tool offers several options to control the file size, as JPEG frames are very big in comparison to efficient video codecs like H.264/H.265 and there are some inefficiencies regarding space in the saedump format. `-r` / `--remove-frame` removes frames from messages before writing them to the dump file. `-d` / `--downscale-frames` (with `-q` / `--downscale-jpeg-quality`) enables trading some quality loss for smaller file sizes.
+For creating longer recordings, the tool offers several options to control the file size, as JPEG frames are very big in comparison to efficient video codecs like H.264/H.265 and there are some inefficiencies regarding space in the saedump format. `-r` / `--remove-frame` removes frames from messages before writing them to the dump file. `-d` / `--downscale-frames` (with `-q` / `--downscale-jpeg-quality`) enables trading some quality loss for smaller file sizes.\
+For `AnomalyMessage`s:
+- Both options apply to every frame of the clip.
+- `-r` replaces each frame with a grey placeholder of the same size, which keeps the clip structure (frame count, timestamps, dimensions) intact.
+- `-r` takes precedence over `-d`.
+
+Messages without frames are recorded unchanged, and so are messages of unknown type.
 
 ### Examples
 - `sae-record -s geomapper:StreamID -t 86400 -d 320 -q 90 -o output.saedump` records 24 hours of geomapper output, scaling down video frames to a width of 320px (at a quality of 90%)
 
 
 ## Pipeline Playback (`sae-play`)
-`sae-play` plays back a pipeline log into a running pipeline (i.e. at least a running Valkey instance). It'll read the log file it is given and play back all messages into the corresponding streams they were recorded from. The messages will be spaced exactly as they were recorded (i.e. a 5fps recording will be played back at the same speed). For many real-world test cases the option `-t` might be interesting, which enables rewriting the message timestamps to the present moment (while still preserving message cadence).
+`sae-play` plays back a pipeline log into a running pipeline (i.e. at least a running Valkey instance). It'll read the log file it is given and play back all messages into the corresponding streams they were recorded from. The messages will be spaced exactly as they were recorded (i.e. a 5fps recording will be played back at the same speed). For many real-world test cases the option `-t` might be interesting, which enables rewriting the message timestamps to the present moment (while still preserving message cadence). For an `AnomalyMessage`, all of its timestamps (frames and trajectory points) are shifted by the same offset, so that its latest timestamp is the present moment and its internal timing is preserved. Messages of unknown type are played back unchanged.
 See `sae-play --help` for how to use it.
 
 
 ## JSON Output (`sae-echo`)
-`sae-echo` echoes all messages it receives into stdout as a JSON string (output of protobufs `MessageToJSON()`), everything else goes to stderr. It currently supports `SaeMessage`, `DetectionCountMessage` and `PositionMessage` - the message type on the chosen stream is autodetected (either using the type field or if that is not set a rather crude heuristic is used). All selected streams must carry the same message type. For `SaeMessage` payloads frame data is removed by default as to not clutter the output.\
+`sae-echo` echoes all messages it receives into stdout as a JSON string (output of protobufs `MessageToJSON()`), everything else goes to stderr. It currently supports `SaeMessage`, `DetectionCountMessage`, `PositionMessage`, `EventMessage` and `AnomalyMessage` - the message type on the chosen stream is autodetected (either using the type field or if that is not set a rather crude heuristic is used). All selected streams must carry the same message type. For `SaeMessage` and `AnomalyMessage` payloads frame data is removed by default as to not clutter the output (use `-f` to keep it).\
 `sae-echo` can be very useful when combined with other tools like jq. For example, to print the source id, frame timestamp and number of detections for each received message: `sae-echo | jq -r '[.frame.sourceId, .frame.timestampUtcMs, (.detections | length)] | @tsv'`
 
 

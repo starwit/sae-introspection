@@ -1,9 +1,11 @@
+import sys
 import time
 from datetime import timedelta
 
 import pybase64
 from visionapi.analytics_pb2 import DetectionCountMessage
-from visionapi.sae_pb2 import PositionMessage, SaeMessage
+from visionapi.anomaly_pb2 import AnomalyMessage
+from visionapi.sae_pb2 import EventMessage, PositionMessage, SaeMessage
 from visionlib.pipeline import ValkeyPublisher
 from visionlib.saedump import DumpMeta, Event, message_splitter
 
@@ -23,35 +25,72 @@ def time_until_interval(prev_message_time: float, target_interval: timedelta):
     sleep_time = target_time - current_time
     return max(0, sleep_time)
 
-def set_frame_timestamp_to_now(proto_bytes: str):
-    msg_type = determine_message_type(proto_bytes)
+def now_ms() -> int:
+    return time.time_ns() // 1000000
+
+# Message types for which a "no timestamp adjustment" warning was already printed
+_warned_types = set()
+
+def adjust_timestamps_to_now(proto_bytes: bytes) -> bytes:
+    '''Rewrites the timestamps of a message to the present moment.
+    Messages with a single timestamp get it set to now. An AnomalyMessage (a clip spanning a time window) has all its
+    timestamps shifted by the same offset, so that its latest timestamp is now and the relative timing is preserved.
+    Messages of unknown type are returned unchanged.'''
+    reason = 'no timestamp handling for this message type'
+    try:
+        msg_type = determine_message_type(proto_bytes)
+    except ValueError as e:
+        msg_type = None
+        reason = str(e)
 
     match msg_type:
         case InternalMessageType.SAE:
             msg = SaeMessage()
             msg.ParseFromString(proto_bytes)
-
-            msg.frame.timestamp_utc_ms = time.time_ns() // 1000000
+            msg.frame.timestamp_utc_ms = now_ms()
             return msg.SerializeToString()
         case InternalMessageType.POSITION:
             msg = PositionMessage()
             msg.ParseFromString(proto_bytes)
-
-            msg.timestamp_utc_ms = time.time_ns() // 1000000
+            msg.timestamp_utc_ms = now_ms()
             return msg.SerializeToString()
         case InternalMessageType.DETECTION_COUNT:
             msg = DetectionCountMessage()
             msg.ParseFromString(proto_bytes)
-
-            msg.timestamp_utc_ms = time.time_ns() // 1000000
+            msg.timestamp_utc_ms = now_ms()
             return msg.SerializeToString()
+        case InternalMessageType.SAE_EVENT:
+            msg = EventMessage()
+            msg.ParseFromString(proto_bytes)
+            msg.timestamp_utc_ms = now_ms()
+            return msg.SerializeToString()
+        case InternalMessageType.ANOMALY:
+            msg = AnomalyMessage()
+            msg.ParseFromString(proto_bytes)
+            shift_anomaly_timestamps_to_now(msg)
+            return msg.SerializeToString()
+        case _:
+            if msg_type not in _warned_types:
+                _warned_types.add(msg_type)
+                print(f'Cannot adjust timestamps of message, playing it back unchanged ({reason})', file=sys.stderr)
+            return proto_bytes
+
+def shift_anomaly_timestamps_to_now(msg: AnomalyMessage):
+    timestamped = [*msg.jpeg_frames, *(point for traj in msg.trajectories for point in traj.trajectory_points)]
+    if len(timestamped) == 0:
+        return
+
+    offset = now_ms() - max(item.timestamp_utc_ms for item in timestamped)
+    for item in timestamped:
+        item.timestamp_utc_ms += offset
 
 
 def main():
     arg_parser = default_arg_parser()
     arg_parser.add_argument('dumpfile')
     arg_parser.add_argument('-l', '--loop', action='store_true', help='Loop indefinitely (exit with Ctrl-C)')
-    arg_parser.add_argument('-t', '--adjust-timestamps', action='store_true', help='Adjust message timestamps to the time in the moment of playback')
+    arg_parser.add_argument('-t', '--adjust-timestamps', action='store_true', help='Adjust message timestamps to the time in the moment of playback. '
+                            'AnomalyMessage clips are shifted as a whole (latest timestamp = now), preserving their relative timing')
     arg_parser.add_argument('-i', '--fixed-interval', type='natural_timedelta', help='Ignore embedded timestamp and instead output messages at the given interval (natural timedelta)', metavar='INTERVAL')
     args = arg_parser.parse_args()
 
@@ -82,7 +121,7 @@ def main():
                     stop_event.wait(time_until_record_time(playback_start_ts, dump_meta.start_time, event.meta.record_time))
 
                 if args.adjust_timestamps:
-                    proto_bytes = set_frame_timestamp_to_now(proto_bytes)
+                    proto_bytes = adjust_timestamps_to_now(proto_bytes)
 
                 publish(event.meta.source_stream, proto_bytes)
 

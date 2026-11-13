@@ -4,6 +4,7 @@ import valkey
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
 from visionapi.analytics_pb2 import DetectionCountMessage
+from visionapi.anomaly_pb2 import AnomalyMessage
 from visionapi.sae_pb2 import EventMessage, PositionMessage, SaeMessage
 from visionlib.pipeline import ValkeyConsumer
 
@@ -22,6 +23,18 @@ def handle_sae_message(message_bytes: bytes, preserve_frame=False):
     msg_json = MessageToJson(msg, always_print_fields_with_no_presence=True)
     print(msg_json, flush=True)
 
+def handle_anomaly_message(message_bytes: bytes, preserve_frame=False):
+    msg = AnomalyMessage()
+    msg.ParseFromString(message_bytes)
+
+    if not preserve_frame:
+        # Frame entries (and their timestamps) are kept, so that the clip structure stays visible
+        for jpeg_frame in msg.jpeg_frames:
+            jpeg_frame.ClearField('frame_data_jpeg')
+
+    msg_json = MessageToJson(msg, always_print_fields_with_no_presence=True)
+    print(msg_json, flush=True)
+
 def handle_generic_message(message_bytes: bytes, msg: Message) -> None:
     msg.ParseFromString(message_bytes)
 
@@ -31,7 +44,7 @@ def handle_generic_message(message_bytes: bytes, msg: Message) -> None:
 def main():
     arg_parser = default_arg_parser()
     arg_parser.add_argument('-s', '--streams', type=str, nargs='*', metavar='STREAM')
-    arg_parser.add_argument('-f', '--preserve-frame', action='store_true', help='Do not remove frame data (WARNING: large output!)')
+    arg_parser.add_argument('-f', '--preserve-frame', action='store_true', help='Do not remove frame data (SaeMessage frame, AnomalyMessage frames) (WARNING: large output!)')
     args = arg_parser.parse_args()
 
     STREAM_KEYS = args.streams
@@ -69,6 +82,8 @@ def main():
                 handle_generic_message(proto_data, DetectionCountMessage())
             elif message_type == InternalMessageType.SAE_EVENT:
                 handle_generic_message(proto_data, EventMessage())
+            elif message_type == InternalMessageType.ANOMALY:
+                handle_anomaly_message(proto_data, args.preserve_frame)
 
 
 if __name__ == "__main__":
