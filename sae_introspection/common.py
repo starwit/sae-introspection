@@ -4,14 +4,17 @@ import sys
 import threading
 from datetime import timedelta
 from enum import Enum
-from typing import List
+from pathlib import Path
+from typing import Generator, Iterable, List, Tuple
 
+import pybase64
 import tempora
 from simple_term_menu import TerminalMenu
 from visionapi.analytics_pb2 import DetectionCountMessage
 from visionapi.common_pb2 import MessageType, TypeMessage
 from visionapi.sae_pb2 import SaeMessage
 from visionlib.pipeline.formats import is_sae_message
+from visionlib.saedump import DumpMeta, Event, message_splitter
 
 
 class InternalMessageType(str, Enum):
@@ -58,6 +61,53 @@ def choose_stream_from_list(stream_list: List[str]) -> str:
         print('No entry chosen. Exiting.', file=sys.stderr)
         exit(0)
     return sorted_streams[selected_idx]
+
+def choose_streams_from_list(stream_list: List[str]) -> List[str]:
+    sorted_streams = sorted(stream_list)
+    menu = TerminalMenu(
+        sorted_streams,
+        title='Choose streams:',
+        show_search_hint=True,
+        multi_select=True,
+        multi_select_empty_ok=True,
+        multi_select_select_on_accept=False,
+        show_multi_select_hint=True,
+    )
+    selected_idx_list = menu.show()
+    if selected_idx_list is None:
+        print('No stream chosen. Exiting.', file=sys.stderr)
+        exit(0)
+    return [sorted_streams[idx] for idx in selected_idx_list]
+
+def iter_sae_dump(file: Path) -> Generator[str, None, None]:
+    with open(file, 'r') as input_file:
+        message_iter = message_splitter(input_file)
+        for message in message_iter:
+            yield message
+
+def get_contained_streams(file: Path) -> List[str]:
+    message_iter = iter_sae_dump(file)
+    first_message = next(message_iter)
+    message_iter.close()
+
+    dump_meta = DumpMeta.model_validate_json(first_message)
+    return dump_meta.recorded_streams
+
+def iter_dump_events(file: Path, stream_keys: Iterable[str]) -> Generator[Tuple[str, bytes], None, None]:
+    '''Yields (source_stream, proto_bytes) for every recorded message from one of stream_keys.'''
+    stream_keys = set(stream_keys)
+    event_iter = iter_sae_dump(file)
+
+    # Skip the DumpMeta message
+    _ = next(event_iter)
+
+    for json_event in event_iter:
+        event = Event.model_validate_json(json_event)
+
+        if event.meta.source_stream not in stream_keys:
+            continue
+
+        yield event.meta.source_stream, pybase64.standard_b64decode(event.data_b64)
 
 def _parse_duration(value: str) -> timedelta:
     try:

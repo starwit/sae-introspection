@@ -97,8 +97,25 @@ See `sae-play --help` for how to use it.
 
 
 ## JSON Output (`sae-echo`)
-`sae-echo` echoes all messages it receives into stdout as a JSON string (output of protobufs `MessageToJSON()`), everything else goes to stderr. It currently supports `SaeMessage`, `DetectionCountMessage` and `PositionMessage` - the message type on the chosen stream is autodetected (either using the type field or if that is not set a rather crude heuristic is used). All selected streams must carry the same message type. For `SaeMessage` payloads frame data is removed by default as to not clutter the output.\
+`sae-echo` echoes all messages it receives into stdout as JSON, one message per line ([JSON Lines](https://jsonlines.org); field names and value encoding follow protobuf's JSON mapping), everything else goes to stderr. For human-readable, indented output pipe it into jq: `sae-echo | jq .`. It currently supports `SaeMessage`, `DetectionCountMessage` and `PositionMessage` - the message type on the chosen stream is autodetected (either using the type field or if that is not set a rather crude heuristic is used). All selected streams must carry the same message type. For `SaeMessage` payloads frame data is removed by default as to not clutter the output.\
+ID fields (`objectId` of detections, `saeUuid`) are printed as hex strings, other binary fields (e.g. frame data) as base64.\
 `sae-echo` can be very useful when combined with other tools like jq. For example, to print the source id, frame timestamp and number of detections for each received message: `sae-echo | jq -r '[.frame.sourceId, .frame.timestampUtcMs, (.detections | length)] | @tsv'`
+
+### Reading from a dump file
+With `-d` / `--dump-file`, `sae-echo` reads messages from a `.saedump` file (e.g. created by `sae-record`) instead of Valkey, so no network access is needed. It echoes all messages of the selected streams as fast as possible and exits at the end of the file. If no streams are given with `-s`, it prompts you to choose from the streams contained in the dump.\
+`-n` / `--max-messages N` stops after N messages (counting only messages of the selected streams), which is handy for peeking into huge dump files. It also works for live Valkey streams.
+
+### Examples
+- `sae-echo -d recording.saedump -s objecttracker:stream1 -n 10` echoes the first 10 messages of `objecttracker:stream1` from the dump
+- CSV output with one line per detection:
+  ```sh
+  sae-echo -d recording.saedump -s objecttracker:stream1 | jq -rn '
+    (["source_id","timestamp_utc_ms","object_id","class_id","confidence","min_x","min_y","max_x","max_y","latitude","longitude"] | @csv),
+    (inputs | .frame as $f | .detections[] |
+      [$f.sourceId, $f.timestampUtcMs, .objectId, .classId, .confidence,
+       .boundingBox.minX, .boundingBox.minY, .boundingBox.maxX, .boundingBox.maxY,
+       .geoCoordinate.latitude, .geoCoordinate.longitude] | @csv)' > detections.csv
+  ```
 
 
 ## Plot SAE Dump (`sae-plot`)

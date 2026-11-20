@@ -5,8 +5,8 @@ import time
 
 import pybase64
 import pytest
-from helpers import (FRAME_BYTES, cli, make_sae_msg, run_cli, terminate,
-                     wait_until, write_saedump)
+from helpers import (FRAME_BYTES, cli, make_sae_msg, parse_json_stream,
+                     run_cli, terminate, wait_until, write_saedump)
 from visionapi.sae_pb2 import SaeMessage
 from visionlib.pipeline import ValkeyPublisher
 from visionlib.saedump import DumpMeta, Event, message_splitter
@@ -57,13 +57,7 @@ def read_saedump(path):
 
 
 def read_json_objects(proc, count, timeout=30.0):
-    '''Reads count JSON objects from a process' stdout.
-
-    MessageToJson() pretty-prints, so a single object spans many lines and the objects
-    arrive as one concatenated stream - hence raw_decode() rather than json.loads() per line.
-    '''
-    decoder = json.JSONDecoder()
-    buffer = ''
+    '''Reads count JSON objects from a process' stdout. sae-echo writes exactly one object per line.'''
     objects = []
     deadline = time.time() + timeout
 
@@ -71,18 +65,7 @@ def read_json_objects(proc, count, timeout=30.0):
         line = proc.stdout.readline()
         if not line:
             break
-        buffer += line
-
-        while True:
-            buffer = buffer.lstrip()
-            if not buffer:
-                break
-            try:
-                obj, end = decoder.raw_decode(buffer)
-            except json.JSONDecodeError:
-                break
-            objects.append(obj)
-            buffer = buffer[end:]
+        objects.append(json.loads(line))
 
     assert len(objects) == count, f'Expected {count} JSON objects, got {len(objects)}'
     return objects
@@ -101,10 +84,27 @@ def test_echo_outputs_json(valkey_container, valkey_args):
     assert [d['frame']['sourceId'] for d in decoded] == ['test_source'] * 3
     assert [int(d['frame']['timestampUtcMs']) for d in decoded] == [1700000000000 + idx for idx in range(3)]
     assert [len(d['detections']) for d in decoded] == [3, 3, 3]
+    # ID bytes are printed as hex, not as protobuf's default base64
+    assert [[det['objectId'] for det in d['detections']] for d in decoded] == \
+        [[det.object_id.hex() for det in msg.detections] for msg in messages]
 
     # Frame data is stripped unless -f is given
     assert all(not d['frame'].get('frameData') for d in decoded)
     assert 'Detected message type' in stderr
+
+
+def test_echo_exits_after_max_messages(valkey_container, valkey_args):
+    messages = [make_sae_msg(timestamp_utc_ms=1700000000000 + idx) for idx in range(5)]
+    publish(valkey_container, STREAM, messages)
+
+    result = subprocess.run(
+        [cli('sae-echo'), *valkey_args, '-s', STREAM, '--start-at-head', '-n', '2'],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, f'sae-echo failed:\n{result.stderr}'
+
+    decoded = parse_json_stream(result.stdout)
+    assert [int(d['frame']['timestampUtcMs']) for d in decoded] == [1700000000000, 1700000000001]
 
 
 def test_echo_preserves_frame_with_flag(valkey_container, valkey_args):

@@ -1,10 +1,11 @@
+import json
 import os
 import shutil
 import subprocess
 import time
 import uuid
 from pathlib import Path
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import pybase64
 from visionapi.common_pb2 import MessageType
@@ -52,20 +53,29 @@ def _make_detection(idx=0) -> Detection:
     return det
 
 
-def write_saedump(path: Path, stream_key: str, messages: List[SaeMessage], interval_s=0.1) -> Path:
-    '''Writes messages into a saedump file, mirroring how record.py writes one.'''
+def write_saedump(path: Path, stream_key: str, messages: List[SaeMessage], interval_s=0.1,
+                  message_streams: Optional[List[str]] = None) -> Path:
+    '''Writes messages into a saedump file, mirroring how record.py writes one.
+
+    By default all messages are recorded from stream_key. To build a multi-stream dump, pass
+    message_streams with the source stream of each message (stream_key is then ignored).
+    '''
     start_time = time.time()
 
+    if message_streams is None:
+        message_streams = [stream_key] * len(messages)
+    assert len(message_streams) == len(messages)
+
     with open(path, 'w') as file:
-        meta = DumpMeta(start_time=start_time, recorded_streams=[stream_key])
+        meta = DumpMeta(start_time=start_time, recorded_streams=list(dict.fromkeys(message_streams)))
         file.write(meta.model_dump_json())
         file.write(MESSAGE_SEPARATOR)
 
-        for idx, msg in enumerate(messages):
+        for idx, (msg, msg_stream) in enumerate(zip(messages, message_streams)):
             event = Event(
                 meta=EventMeta(
                     record_time=start_time + idx * interval_s,
-                    source_stream=stream_key,
+                    source_stream=msg_stream,
                 ),
                 data_b64=pybase64.standard_b64encode(msg.SerializeToString()),
             )
@@ -73,6 +83,13 @@ def write_saedump(path: Path, stream_key: str, messages: List[SaeMessage], inter
             file.write(MESSAGE_SEPARATOR)
 
     return path
+
+
+def parse_json_stream(text: str) -> List[dict]:
+    '''Parses sae-echo output (one JSON object per line) and checks that it really is one object per line.'''
+    lines = text.splitlines()
+    assert all(lines), 'sae-echo output contains empty lines'
+    return [json.loads(line) for line in lines]
 
 
 def cli(name: str) -> str:

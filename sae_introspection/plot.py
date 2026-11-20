@@ -1,33 +1,20 @@
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, Generator, Tuple
 
 import pybase64
 import tqdm
 from palettable.colorbrewer.qualitative import Set1_9
 from PIL import Image, ImageDraw
 from visionapi.sae_pb2 import SaeMessage
-from visionlib.saedump import DumpMeta, Event, message_splitter
+from visionlib.saedump import Event
 
 from .common import (InternalMessageType, choose_stream_from_list,
-                     determine_message_type, register_stop_handler)
+                     determine_message_type, get_contained_streams,
+                     iter_sae_dump, register_stop_handler)
 
 CLS_CMAP = Set1_9.colors
 ALPHA = 0.80
-
-def iter_sae_dump(file: Path) -> Generator[bytes, None, None]:
-    with open(file, 'r') as input_file:
-        message_iter = message_splitter(input_file)
-        for message in message_iter:
-            yield message
-
-def get_contained_streams(file: Path) -> List[str]:
-    message_iter = iter_sae_dump(file)
-    first_message = next(message_iter)
-    message_iter.close()
-
-    dump_meta = DumpMeta.model_validate_json(first_message)
-    return dump_meta.recorded_streams
 
 def iter_sae_messages(dump_file: Path, stream_id: str) -> Generator[SaeMessage, None, None]:
     event_iter = iter_sae_dump(dump_file)

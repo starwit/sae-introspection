@@ -1665,7 +1665,7 @@ subdirectory = "python/visionapi"
 
 [[package]]
 name = "visionlib"
-version = "1.1.0"
+version = "1.1.2"
 description = ""
 optional = false
 python-versions = "^3.10"
@@ -1686,8 +1686,8 @@ valkey = ">=6.0.0"
 [package.source]
 type = "git"
 url = "https://github.com/starwit/vision-lib.git"
-reference = "1.1.0"
-resolved_reference = "a8b14d7f331caddecc334c435e943ab3f28d9a8f"
+reference = "1.1.2"
+resolved_reference = "2d8d9f705f65bf1ed034d6a0f2c0447403174618"
 subdirectory = "python"
 
 [[package]]
@@ -1796,4 +1796,4 @@ dev = ["pytest", "setuptools"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "8289668914439ce7e67c41bb385d86a138e3908e753742ef0ca38c57d5fc273e"
+content-hash = "da0a53fb3f1f92e237a4fc830a9625521021ec3085cb14c89b77bead48472eeb"
