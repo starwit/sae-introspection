@@ -1,6 +1,6 @@
 [project]
 name = "sae-introspection"
-version = "1.0.0"
+version = "1.1.0"
 description = "Tools to look into a running Starwit Awareness Engine instance"
 authors = [
     {name = "flonix8",email = "flstanek@googlemail.com"}
