@@ -9,9 +9,10 @@ from PIL import Image, ImageDraw
 from visionapi.sae_pb2 import SaeMessage
 from visionlib.saedump import Event
 
-from .common import (InternalMessageType, choose_stream_from_list,
-                     determine_message_type, get_contained_streams,
-                     iter_sae_dump, register_stop_handler)
+from .common import (InternalMessageType, add_version_arg,
+                     choose_stream_from_list, determine_message_type,
+                     get_contained_streams, iter_sae_dump,
+                     register_stop_handler)
 
 CLS_CMAP = Set1_9.colors
 ALPHA = 0.80
@@ -46,6 +47,7 @@ def get_color(class_id: int) -> Tuple[int]:
 
 def main():
     arg_parser = ArgumentParser()
+    add_version_arg(arg_parser)
     arg_parser.add_argument('dumpfile', type=Path, help='Path to SAE dump file to plot')
     arg_parser.add_argument('-i', '--image-file', help='Path to an image to plot trajectories on (grey background will be used if not specified)')
     args = arg_parser.parse_args()

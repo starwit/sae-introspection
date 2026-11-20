@@ -1,4 +1,5 @@
 import subprocess
+from importlib.metadata import version
 
 import pytest
 from helpers import cli
@@ -13,3 +14,11 @@ def test_entrypoint_shows_help(command):
 
     assert result.returncode == 0, f'{command} --help failed:\n{result.stderr}'
     assert result.stdout.startswith(f'usage: {command}')
+
+
+@pytest.mark.parametrize('command', ALL_COMMANDS)
+def test_entrypoint_shows_version(command):
+    result = subprocess.run([cli(command), '--version'], capture_output=True, text=True, timeout=60)
+
+    assert result.returncode == 0, f'{command} --version failed:\n{result.stderr}'
+    assert result.stdout.strip() == f'sae-introspection {version("sae-introspection")}'

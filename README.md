@@ -12,8 +12,9 @@ Install the tools into an isolated environment with [pipx](https://pipx.pypa.io)
 pipx install git+https://github.com/starwit/sae-introspection.git
 ```
 
-To pin a specific state, append the commit id: `...sae-introspection.git@a1b2c3d`.
+To install a specific release, append its version: `...sae-introspection.git@1.1.0` (see [CHANGELOG.md](CHANGELOG.md); a commit id works as well).
 Upgrade with `pipx upgrade sae-introspection`, remove with `pipx uninstall sae-introspection`.
+Every tool prints its version with `--version`, e.g. `sae-echo --version`.
 
 This puts the following commands on your `PATH`:
 
@@ -58,6 +59,10 @@ Make sure `DOCKER_HOST` points at the correct socket:
 ```sh
 export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock
 ```
+
+### Releasing
+
+The version lives in `pyproject.toml` only. To release, run the *Create Release* workflow on GitHub (Actions tab) and pick `patch`, `minor` or `major`: it bumps the version, commits it and creates a GitHub release with a tag of the same name. Update [CHANGELOG.md](CHANGELOG.md) before that.
 
 # Tools
 These tools were originally made for `SaeMessages`, however, `sae-echo` supports more vision-api message types (see below).

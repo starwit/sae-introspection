@@ -16,6 +16,8 @@ from visionapi.sae_pb2 import SaeMessage
 from visionlib.pipeline.formats import is_sae_message
 from visionlib.saedump import DumpMeta, Event, message_splitter
 
+from . import __version__
+
 
 class InternalMessageType(str, Enum):
     SAE = 'SAE'
@@ -115,9 +117,14 @@ def _parse_duration(value: str) -> timedelta:
     except Exception as e:
         raise argparse.ArgumentTypeError(f"Invalid duration '{value}': {e}")
 
+def add_version_arg(arg_parser: argparse.ArgumentParser):
+    arg_parser.add_argument('--version', action='version', version=f'sae-introspection {__version__}',
+                            help='Show version and exit')
+
 def default_arg_parser():
     arg_parser = argparse.ArgumentParser(add_help=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('--help', action='help', help='Show help message and exit')
+    add_version_arg(arg_parser)
     # --redis-* is kept as a deprecated alias for the flags' previous names
     arg_parser.add_argument('-h', '--valkey-host', '--redis-host', type=str, default='localhost', help='Valkey/Redis host to connect to', metavar='HOST')
     arg_parser.add_argument('-p', '--valkey-port', '--redis-port', type=int, default=6379, help='Valkey/Redis port to connect to', metavar='PORT')

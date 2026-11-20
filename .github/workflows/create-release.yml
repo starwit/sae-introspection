@@ -1,0 +1,56 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      versionChoice:
+        type: choice
+        required: true
+        description: Version Change
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: create new release
+    runs-on: [self-hosted, linux, X64]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+      - name: Install GH CLI
+        uses: dev-hanz-ops/install-gh-cli-action@v0.2.1
+      - name: Create new version in pyproject.toml
+        run: poetry version $VERSION
+        env:
+          VERSION: ${{ inputs.versionChoice }}
+      - name: Commit new version
+        run: |
+          git config --global user.email "code@starwit.de"
+          git config --global user.name "Starwit"
+          git remote set-url --push origin https://Starwit:$GITHUB_TOKEN@github.com/starwit/sae-introspection.git
+          git add pyproject.toml
+          modifications=$(git status | grep "modified" || true)
+          if [ ! -z "$modifications" ]; then
+            echo "modifications found: $modifications"
+            git commit -m "modified project version" pyproject.toml
+            git push
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub release
+        run: |
+          APP_VERSION=$(poetry version -s)
+          gh release create "$APP_VERSION" --title "$APP_VERSION" --target "$(git branch --show-current)" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
