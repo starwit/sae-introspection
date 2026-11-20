@@ -27,7 +27,8 @@ def require_turbojpeg(purpose: str) -> TurboJPEG:
         return TurboJPEG()
     except RuntimeError:
         print(f'{purpose} requires the libturbojpeg system library, which could not be found.\n'
-              'Install it, e.g. on Debian/Ubuntu: sudo apt install libturbojpeg', file=sys.stderr)
+              'Install it, e.g. on Debian/Ubuntu: sudo apt install libturbojpeg\n'
+              '(on some distributions/releases the package is called libturbojpeg0)', file=sys.stderr)
         exit(1)
 
 

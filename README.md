@@ -19,6 +19,7 @@ Tools to look into a running [Starwit Awareness Engine](https://github.com/starw
   ```sh
   sudo apt install libturbojpeg
   ```
+  On some distributions/releases the package is called `libturbojpeg0` instead.
 
 ### Install
 
