@@ -13,8 +13,10 @@ pipx install git+https://github.com/starwit/sae-introspection.git
 ```
 
 To install a specific release, append its version: `...sae-introspection.git@1.1.0` (see [CHANGELOG.md](CHANGELOG.md); a commit id works as well).
-Upgrade with `pipx upgrade sae-introspection`, remove with `pipx uninstall sae-introspection`.
-Every tool prints its version with `--version`, e.g. `sae-echo --version`.
+Upgrade with `pipx upgrade sae-introspection`. This only picks up a new release (version bump), not every commit on `main`.
+If you installed a specific version (`@1.1.0`), switch versions with `pipx install --force git+https://github.com/starwit/sae-introspection.git@<version>`.
+Check what you have with `sae-echo --version` (every tool supports `--version`).
+Remove with `pipx uninstall sae-introspection`.
 
 This puts the following commands on your `PATH`:
 
