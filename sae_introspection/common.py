@@ -10,6 +10,7 @@ from typing import Generator, Iterable, List, Tuple
 import pybase64
 import tempora
 from simple_term_menu import TerminalMenu
+from turbojpeg import TurboJPEG
 from visionapi.analytics_pb2 import DetectionCountMessage
 from visionapi.common_pb2 import MessageType, TypeMessage
 from visionapi.sae_pb2 import SaeMessage
@@ -17,6 +18,17 @@ from visionlib.pipeline.formats import is_sae_message
 from visionlib.saedump import DumpMeta, Event, message_splitter
 
 from . import __version__
+
+
+def require_turbojpeg(purpose: str) -> TurboJPEG:
+    '''Returns a TurboJPEG instance or exits with a friendly message if the libturbojpeg system library is missing.
+    Only call this where JPEG en-/decoding is actually needed, so that the other tools work without it.'''
+    try:
+        return TurboJPEG()
+    except RuntimeError:
+        print(f'{purpose} requires the libturbojpeg system library, which could not be found.\n'
+              'Install it, e.g. on Debian/Ubuntu: sudo apt install libturbojpeg', file=sys.stderr)
+        exit(1)
 
 
 class InternalMessageType(str, Enum):

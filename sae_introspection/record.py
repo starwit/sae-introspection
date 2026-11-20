@@ -11,16 +11,16 @@ from visionlib.pipeline import ValkeyConsumer, get_raw_frame_data
 from visionlib.saedump import MESSAGE_SEPARATOR, DumpMeta, Event, EventMeta
 
 from .common import (InternalMessageType, choose_streams, default_arg_parser,
-                     determine_message_type, register_stop_handler)
+                     determine_message_type, register_stop_handler,
+                     require_turbojpeg)
 
-# Initialized lazily, as it needs libturbojpeg installed on the system, which is
-# only required when actually downscaling frames
-jpeg = None
+# Created on first use (main() does that up front when downscaling), as only downscaling needs libturbojpeg
+jpeg: TurboJPEG | None = None
 
 def get_jpeg() -> TurboJPEG:
     global jpeg
     if jpeg is None:
-        jpeg = TurboJPEG()
+        jpeg = require_turbojpeg('Downscaling frames')
     return jpeg
 
 def write_meta(file: TextIO, start_time: float, stream_keys: list[str]):
@@ -89,6 +89,10 @@ def main():
     STREAM_KEYS = args.streams
     VALKEY_HOST = args.valkey_host
     VALKEY_PORT = args.valkey_port
+
+    if args.downscale_frames > 0:
+        # Fail early instead of on the first frame
+        get_jpeg()
 
     if STREAM_KEYS is None:
         valkey_client = valkey.Valkey(VALKEY_HOST, VALKEY_PORT)

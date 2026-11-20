@@ -10,7 +10,8 @@ from visionapi.sae_pb2 import Detection, SaeMessage
 from visionlib.pipeline import ValkeyConsumer, get_raw_frame_data
 
 from .common import (InternalMessageType, choose_stream, default_arg_parser,
-                     determine_message_type, register_stop_handler)
+                     determine_message_type, register_stop_handler,
+                     require_turbojpeg)
 
 # pygame prints a banner to stdout on import, which would corrupt the raw frames written with --stdout
 os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
@@ -151,6 +152,10 @@ def main():
     if args.stdout and sys.stdout.isatty():
         print('Stdout is the terminal. Ignoring "stdout" option. Please redirect (e.g. into ffmpeg)', file=sys.stderr)
         args.stdout = False
+
+    if args.image_file is None:
+        # Frames from the stream are usually JPEG; fail early with a helpful message if they cannot be decoded
+        require_turbojpeg('Displaying frames from the stream')
 
     STREAM_KEY = args.stream
     VALKEY_HOST = args.valkey_host

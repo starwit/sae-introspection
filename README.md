@@ -6,17 +6,31 @@ Tools to look into a running [Starwit Awareness Engine](https://github.com/starw
 
 ## As a user (recommended)
 
-Install the tools into an isolated environment with [pipx](https://pipx.pypa.io):
+### Prerequisites
 
+- Python >= 3.11
+- [pipx](https://pipx.pypa.io) (packaged in Ubuntu >= 22.04 and Debian >= 12; for other systems see the [pipx installation docs](https://pipx.pypa.io/stable/installation/)):
+  ```sh
+  sudo apt install pipx
+  pipx ensurepath
+  ```
+  `pipx ensurepath` adds `~/.local/bin` to your `PATH`; open a new shell afterwards.
+- `libturbojpeg`, only needed by `sae-watch` (to decode frames) and `sae-record -d` (to downscale frames); the tools tell you if it is missing. E.g. on Debian/Ubuntu:
+  ```sh
+  sudo apt install libturbojpeg
+  ```
+
+### Install
+
+Latest state of `main`:
 ```sh
 pipx install git+https://github.com/starwit/sae-introspection.git
 ```
 
-To install a specific release, append its version: `...sae-introspection.git@1.1.0` (see [CHANGELOG.md](CHANGELOG.md); a commit id works as well).
-Upgrade with `pipx upgrade sae-introspection`. This only picks up a new release (version bump), not every commit on `main`.
-If you installed a specific version (`@1.1.0`), switch versions with `pipx install --force git+https://github.com/starwit/sae-introspection.git@<version>`.
-Check what you have with `sae-echo --version` (every tool supports `--version`).
-Remove with `pipx uninstall sae-introspection`.
+Or a specific release (see [CHANGELOG.md](CHANGELOG.md) for versions; a commit id works as well):
+```sh
+pipx install git+https://github.com/starwit/sae-introspection.git@1.1.0
+```
 
 This puts the following commands on your `PATH`:
 
@@ -28,16 +42,42 @@ This puts the following commands on your `PATH`:
 | `sae-echo` | Echo messages to stdout as JSON |
 | `sae-plot` | Plot object trajectories from a `.saedump` file onto an image |
 
-### Prerequisites
+Every tool prints the installed version:
+```sh
+sae-echo --version
+```
 
-- Python >= 3.11
-- `libturbojpeg` on your OS (e.g. `apt install libturbojpeg`)
+### Upgrade
+
+If installed from `main`:
+```sh
+pipx upgrade sae-introspection
+```
+This only picks up a new release (version bump), not every commit on `main`.
+
+If installed with a specific version, switch to another one by reinstalling with the new version:
+```sh
+pipx install --force git+https://github.com/starwit/sae-introspection.git@1.1.0
+```
+
+### Uninstall
+
+```sh
+pipx uninstall sae-introspection
+```
 
 ## For development
 
-- Python >= 3.11, Poetry >= 2.0.0
-- Install dependencies: `poetry install`
-- Run a tool: `poetry run sae-watch` (or `poetry run python -m sae_introspection.watch`)
+Requires Python >= 3.11 and Poetry >= 2.0.0.
+
+```sh
+poetry install
+```
+
+Run a tool:
+```sh
+poetry run sae-watch
+```
 
 ### Running tests
 

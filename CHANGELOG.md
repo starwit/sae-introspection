@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1]
+
+### Changed
+- `libturbojpeg` is only required by `sae-watch` and `sae-record -d`; these exit with an installation hint if it is missing
+- Bump visionlib to 1.2.0 (loads libturbojpeg lazily)
+
 ## [1.1.0]
 
 ### Added
