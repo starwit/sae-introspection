@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0]
+
+### Added
+- `sae-echo`, `sae-record` and `sae-watch` now read both base64-encoded and raw stream payloads (detected per message), so they also work with publishers that don't use base64
+
+### Changed
+- Bump visionlib to 1.4.0
+- `sae-play` no longer creates the default consumer group (`visionlib-default-group`) on the streams it publishes to
+- The missing-`libturbojpeg` hint (error message and README) now mentions the alternative package name `libturbojpeg0`
+
 ## [1.1.1]
 
 ### Changed

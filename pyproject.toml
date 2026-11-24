@@ -21,7 +21,7 @@ dependencies = [
     "tqdm (>=4.67.1,<5.0.0)",
     "valkey (>=6.0.0,<7.0.0)",
     "visionapi @ git+https://github.com/starwit/vision-api.git@3.7.0#subdirectory=python/visionapi",
-    "visionlib @ git+https://github.com/starwit/vision-lib.git@1.2.0#subdirectory=python",
+    "visionlib @ git+https://github.com/starwit/vision-lib.git@1.4.0#subdirectory=python",
 ]
 
 [project.urls]
